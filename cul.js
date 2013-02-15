@@ -227,11 +227,7 @@ var cul =
 	blur_callback: null,
 	canvas: null,
 	context: null,
-	max_fps: 60,
-	fps: 0.0,
-	frame: 0,
-	current_time: 0,
-	update_time: 0,
+	fps: 60,
 	keys: [],
 	mouse: { x: 0, y: 0, wheel: { up: false, down: false }, button: []},
 	browser: { width: 0, height: 0 },
@@ -269,14 +265,6 @@ var cul =
 
 	loop: function()
 	{
-		this.current_time = new Date().getTime();
-		this.frame += 1;
-
-		if (this.frame >= this.max_fps)
-		{
-			this.frame = 0;
-		}
-
 		if (cul.update_callback != null)
 		{
 			cul.update_callback();
@@ -302,17 +290,7 @@ var cul =
 			cul.render_callback();
 		}
 
-		this.update_time = new Date().getTime() - this.current_time;
-
-		this.fps = 100.0 / this.update_time;
-
-		if (this.fps > this.max_fps)
-		{
-			this.fps = this.max_fps;
-		}
-
-		//window.setTimeout(cul.loop, (1000.0 / cul.max_fps) - cul.update_time);
-		window.setTimeout(cul.loop, 1000.0 / cul.max_fps);
+		window.setTimeout(cul.loop, 1000.0 / cul.fps);
 	},
 
 	ready: function(callback)
@@ -684,7 +662,7 @@ var cul =
 
 		for (var name in from)
 		{
-			to[name] = typeof to[name] == 'undefined' ? cul.extend(from[name], null) : to[name];
+			to[name] = typeof to[name] == 'undefined' ? cul.extend(from[name], null) : from[name];
 		}
 
 		return to;
