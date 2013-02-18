@@ -349,7 +349,7 @@ var cul =
 			this.context = context;
 		} else
 		{
-			this.context = this.canvas.getContext(context || '2d');
+			this.context = this.canvas.getContext(context || '2d', { antialias: false });
 		}
 
 		this.resize();
