@@ -1,9 +1,11 @@
 
+var cul = new CUL();
+
 // on DOM ready
-cul.ready( function()
+CUL.ready( function()
 {
 	// initialize cul, canvas context etc.
-	var ctx = cul.create('My game', 1024, 768, true);
+	var ctx = cul.bind('cul', 1024, 768, true);
 
 	cul.run();
 });

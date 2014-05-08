@@ -1,16 +1,540 @@
 /**
  * Canvas Utility Library
  *
- * Copyright (c) 2012-2013 wesz/Por Design (pordesign.eu)
+ * Copyright (c) 2012-2014 wesz/ether (onether.com)
  * Dual licensed under the MIT and GPL licenses:
  * http://www.opensource.org/licenses/mit-license.php
  * http://www.gnu.org/licenses/gpl.html
  *
  */
 
-const CUL =
+window.CUL = (function(_cul)
 {
-	KEY:
+	_cul = function(element, width, height, center, context)
+	{
+		var _cul = this;
+
+		_cul.init_callback = null;
+		_cul.render_callback = null;
+		_cul.update_callback = null;
+		_cul.focus_callback = null;
+		_cul.blur_callback = null;
+		_cul.canvas = null;
+		_cul.context = null;
+		_cul.fps = 60;
+		_cul.keys = [];
+		_cul.offset = { x: 0, y: 0 };
+		_cul.mouse = { x: 0, y: 0, wheel: { up: false, down: false }, button: []};
+		_cul.browser = { width: 0, height: 0 };
+		_cul.screen = { width: 0, height: 0, center: false };
+		_cul.tick = { prev: null, curr: null, fps: 0 };
+
+		return _cul;
+	};
+
+	_cul.prototype.listen = function(event, element, callback)
+	{
+		if (element.addEventListener)
+		{
+			element.addEventListener(event, callback, false);
+		} else if (element.attachEvent)
+		{
+			element.attachEvent('on' + event, callback);
+		}
+	};
+
+	_cul.prototype.trigger = function(event, element)
+	{
+		if (typeof(element[event]) == 'function')
+		{
+			element[event]();
+		}
+	};
+
+	_cul.prototype.run = function(fps)
+	{
+		var cul = this;
+
+		if (cul.init_callback != null)
+		{
+			cul.init_callback();
+			cul.init_callback = null;
+		}
+
+		if (typeof fps != 'undefined')
+		{
+			cul.fps = fps;
+		}
+
+		cul.tick.prev = new Date().getTime() / 1000;
+
+		cul.loop();
+	};
+
+	_cul.prototype.loop = function()
+	{
+		var cul = this;
+
+		cul.tick.curr = new Date().getTime() / 1000;
+
+		var elapsed = cul.tick.curr - cul.tick.prev;
+
+		cul.tick.fps = (1.0 / elapsed).toFixed(2);
+
+		cul.tick.prev = cul.tick.curr;
+
+		if (cul.update_callback != null)
+		{
+			cul.update_callback(cul.canvas, cul.context);
+
+			cul.mouse.wheel.down = false;
+			cul.mouse.wheel.up = false;
+
+			for (var i = 0; i < 2; i++)
+			{
+				cul.mouse.button[i].down = false;
+				cul.mouse.button[i].up = false;
+			}
+
+			for (var i = 0; i < 255; i++)
+			{
+				cul.keys[i].down = false;
+				cul.keys[i].up = false;
+			}
+		}
+
+		if (cul.render_callback != null)
+		{
+			cul.render_callback(cul.canvas, cul.context);
+		}
+
+		window.setTimeout(function() { cul.loop(); }, 1000.0 / cul.fps);
+	};
+
+	_cul.prototype.resize = function()
+	{
+		var cul = this;
+
+		if ( ! window.innerWidth)
+		{
+			if ( ! (document.documentElement.clientWidth == 0))
+			{
+				cul.browser.width = document.documentElement.clientWidth;
+				cul.browser.height = document.documentElement.clientHeight;
+			} else
+			{
+				cul.browser.width = document.body.clientWidth;
+				cul.browser.height = document.body.clientHeight;
+			}
+		} else
+		{
+			cul.browser.width = window.innerWidth;
+			cul.browser.height = window.innerHeight;
+		}
+
+		cul.canvas.width = (cul.screen.width == null ? cul.browser.width : cul.screen.width);
+		cul.canvas.height = (cul.screen.height == null ? cul.browser.height : cul.screen.height);
+		cul.canvas.style.cssText = 'width: ' + cul.canvas.width + 'px; height: ' + cul.canvas.height + 'px' + (cul.screen.center ? ' position: absolute;' + (cul.screen.center ? ' left: ' + (cul.browser.width/2 - cul.context.canvas.width/2) + 'px; top: ' + (cul.browser.height/2 - cul.context.canvas.height/2) + 'px;' : '') : '');
+	};
+
+	_cul.prototype.bind = function(element, width, height, center, context)
+	{
+		var cul = this;
+
+		element = element || 'cul';
+		width = width || 320;
+		height = height || 240;
+		center = typeof center == 'undefined' ? true : center;
+		context = context || '2d';
+
+		cul.canvas = document.getElementById(element);
+
+		if (typeof context == 'object')
+		{
+			cul.context = context;
+		} else
+		{
+			cul.context = cul.canvas.getContext(context || '2d', { antialias: false/*, premultipliedAlpha: false, alpha: true*/ });
+		}
+
+		cul.resize();
+		cul.listen('resize', window, function() { cul.resize(); });
+
+		cul.screen.width = width;
+		cul.screen.height = height;
+		cul.screen.center = center;
+
+		cul.listen('focus', cul.canvas, function()
+		{
+			cul.canvas.focused = true;
+
+			if (cul.focus_callback != null)
+			{
+				cul.focus_callback();
+			}
+		});
+
+		cul.listen('blur', cul.canvas, function()
+		{
+			cul.canvas.focused = false;
+
+			if (cul.blur_callback != null)
+			{
+				cul.blur_callback();
+			}
+		});
+
+		cul.listen('mousemove', window, function(e)
+		{
+			if (CUL.instancecount == 0 || cul.canvas.focused)
+			{
+				e = e || window.event;
+
+				if (e.pageX || e.pageY)
+				{
+					cul.mouse.x = e.pageX;
+					cul.mouse.y = e.pageY;
+				} else
+				{
+					cul.mouse.x = e.clientX + document.body.scrollLeft + document.documentElement.scrollLeft;
+					cul.mouse.y = e.clientY + document.body.scrollTop + document.documentElement.scrollTop;
+				}
+
+				cul.offset.x = cul.canvas.offsetParent.offsetLeft;
+				cul.offset.y = cul.canvas.offsetParent.offsetTop;
+
+				cul.mouse.x -= cul.canvas.offsetLeft;
+				cul.mouse.y -= cul.canvas.offsetTop;
+			}
+		});
+
+		for (var i = 0; i < 2; i++)
+		{
+			cul.mouse.button[i] = { down: false, up: false, state: _cul.KEY.IS_RELEASED };
+		}
+
+		cul.listen('mousedown', window, function(e)
+		{
+			if (CUL.instancecount == 0 || cul.canvas.focused)
+			{
+				if (e.which)
+				{
+					cul.mouse.button[0].down = (e.which == 1);
+					cul.mouse.button[1].down = (e.which == 3);
+				} else if (e.button)
+				{
+					cul.mouse.button[0].down = (e.button == 0);
+					cul.mouse.button[1].down = (e.button == 2);
+				}
+
+				for (var i = 0; i < 2; i++)
+				{
+					if (cul.mouse.button[i].down)
+					{
+						cul.mouse.button[i].state = _cul.KEY.IS_PRESSED;
+					}
+				}
+			}
+		});
+
+		cul.listen('mouseup', window, function(e)
+		{
+			if (e.which)
+			{
+				cul.mouse.button[0].up = (e.which == 1);
+				cul.mouse.button[1].up = (e.which == 3);
+			} else if (e.button)
+			{
+				cul.mouse.button[0].up = (e.button == 0);
+				cul.mouse.button[1].up = (e.button == 2);
+			}
+
+			for (var i = 0; i < 2; i++)
+			{
+				if (cul.mouse.button[i].up)
+				{
+					cul.mouse.button[i].state = _cul.KEY.IS_RELEASED;
+				}
+			}
+		});
+
+		cul.listen('contextmenu', window, function(e)
+		{
+			e.preventDefault();
+		});
+
+		cul.listen('mousewheel', window, function(e)
+		{
+			var delta = 0;
+			cul.mouse.wheel.up = false;
+			cul.mouse.wheel.down = false;
+
+			if (CUL.instancecount == 0 || cul.canvas.focused)
+			{
+				e = e || window.event;
+
+				if (e.wheelDelta)
+				{
+					delta = event.wheelDelta / 120;
+
+					if (window.opera)
+					{
+						delta = -delta;
+					}
+				} else if (e.detail)
+				{
+					delta = -e.detail / 3;
+				}
+
+				if (delta > 0)
+				{
+					cul.mouse.wheel.up = true;
+				} else if (delta < 0)
+				{
+					cul.mouse.wheel.down = true;
+				}
+			}
+		});
+
+		for (var i = 0; i < 255; i++)
+		{
+			cul.keys[i] = { down: false, up: false, state: _cul.KEY.IS_RELEASED, once: false };
+		}
+
+		cul.listen('keydown', window, function(event)
+		{
+			if ((CUL.instancecount == 0 || cul.canvas.focused) && ! cul.keys[event.keyCode].once)
+			{
+				cul.keys[event.keyCode].down = true;
+				cul.keys[event.keyCode].state = _cul.KEY.IS_PRESSED;
+				cul.keys[event.keyCode].once = true;
+			}
+		});
+
+		cul.listen('keyup', window, function(event)
+		{
+			cul.keys[event.keyCode].up = true;
+			cul.keys[event.keyCode].once = false;
+			cul.keys[event.keyCode].state = _cul.KEY.IS_RELEASED;
+		});
+
+		cul.canvas.width = (width == null ? cul.browser.width : width);
+		cul.canvas.height = (height == null ? cul.browser.height : height);
+		cul.canvas.style.cssText = 'width: ' + cul.canvas.width + 'px; height: ' + cul.canvas.height + 'px;' + (cul.screen.center ? ' position: absolute; left: ' + (cul.browser.width/2 - cul.canvas.width/2) + 'px; top: ' + (cul.browser.height/2 - cul.canvas.height/2) + 'px;' : '');
+
+		cul.canvas.focused = false;
+		cul.canvas.setAttribute('tabindex', CUL.instancecount);
+
+		if (CUL.instancecount == 0)
+		{
+			cul.canvas.focus();
+		}
+
+		CUL.instancecount++;
+
+
+		return cul.context;
+	};
+
+	_cul.prototype.render = function(callback)
+	{
+		var cul = this;
+
+		cul.render_callback = callback;
+	};
+
+	_cul.prototype.update = function(callback)
+	{
+		var cul = this;
+
+		cul.update_callback = callback;
+	};
+
+	_cul.prototype.init = function(callback)
+	{
+		var cul = this;
+
+		cul.init_callback = callback;
+	};
+
+	_cul.prototype.focus = function(callback)
+	{
+		var cul = this;
+
+		cul.focus_callback = callback;
+	};
+
+	_cul.prototype.blur = function(callback)
+	{
+		var cul = this;
+
+		cul.blur_callback = callback;
+	};
+
+	_cul.prototype.keycode = function(key)
+	{
+		for (var k in _cul.CHAR[0])
+		{
+			if (_cul.CHAR[0][k] == key)
+			{
+				return k;
+			}
+		}
+
+		return;
+	};
+
+	_cul.prototype.keydown = function(key)
+	{
+		var cul = this;
+
+		if (typeof key == 'string')
+		{
+			key = cul.keycode(key);
+		}
+
+		if (typeof cul.keys[key] != 'undefined')
+		{
+			if (cul.keys[key].down)
+			{
+				return true;
+			}
+		}
+
+		return false;
+	};
+
+	_cul.prototype.keyup = function(key)
+	{
+		var cul = this;
+
+		if (typeof key == 'string')
+		{
+			key = cul.keycode(key);
+		}
+
+		if (typeof cul.keys[key] != 'undefined')
+		{
+			if (cul.keys[key].up)
+			{
+				return true;
+			}
+		}
+
+		return false;
+	};
+
+	_cul.prototype.keypressed = function(key)
+	{
+		var cul = this;
+
+		if (typeof key == 'string')
+		{
+			key = cul.keycode(key);
+		}
+
+		if (typeof cul.keys[key] != 'undefined')
+		{
+			if (cul.keys[key].state == _cul.KEY.IS_PRESSED)
+			{
+				return true;
+			}
+		}
+
+		return false;
+	};
+
+	_cul.prototype.mousedown = function(button)
+	{
+		var cul = this;
+
+		if (cul.mouse.button[button].down)
+		{
+			return true;
+		}
+
+		return false;
+	};
+
+	_cul.prototype.mouseup = function(button)
+	{
+		var cul = this;
+
+		if (cul.mouse.button[button].up)
+		{
+			return true;
+		}
+
+		return false;
+	};
+
+	_cul.prototype.mousepressed = function(button)
+	{
+		var cul = this;
+
+		if (cul.mouse.button[button].state == _cul.KEY.IS_PRESSED)
+		{
+			return true;
+		}
+
+		return false;
+	};
+
+	_cul.prototype.mousewheelup = function()
+	{
+		var cul = this;
+
+		return cul.mouse.wheel.up;
+	};
+
+	_cul.prototype.mousewheeldown = function()
+	{
+		var cul = this;
+
+		return cul.mouse.wheel.down;
+	};
+
+	_cul.prototype.mousepos = function(relative)
+	{
+		var cul = this;
+
+		return { x: cul.mouse.x - (relative ? cul.offset.x : 0), y: cul.mouse.y - (relative ? cul.offset.y : 0) };
+	};
+
+	_cul.prototype.get_fps = function()
+	{
+		var cul = this;
+
+		return Math.floor(cul.fps);
+	};
+
+	_cul.prototype.extend = function(from, to)
+	{
+		var cul = this;
+
+		if (from == null || typeof from != 'object')
+		{
+			return from;
+		}
+
+		if (from.constructor == Date || from.constructor == RegExp || from.constructor == Function || from.constructor == String || from.constructor == Number || from.constructor == Boolean)
+		{
+			return new from.constructor(from);
+		}
+
+		to = to || new from.constructor();
+
+		for (var name in from)
+		{
+			to[name] = typeof to[name] == 'undefined' ? cul.extend(from[name], null) : from[name];
+		}
+
+		return to;
+	};
+
+	_cul.instancecount = 0;
+
+	_cul.KEY =
 	{
 		IS_PRESSED: 0,
 		IS_RELEASED: 1,
@@ -118,8 +642,9 @@ const CUL =
 		MOUSE_RIGHT: 1,
 		MOUSE_WHEEL_UP: 2,
 		MOUSE_WHEEL_DOWN: 3
-	},
-	CHAR:
+	};
+
+	_cul.CHAR =
 	[{
 		32: ' ',
 		222: '\'',
@@ -215,521 +740,21 @@ const CUL =
 		219: '{',
 		187: '+',
 		221: '}',
-	}]
-};
+	}];
 
-var cul =
-{
-	init_callback: null,
-	render_callback: null,
-	update_callback: null,
-	focus_callback: null,
-	blur_callback: null,
-	canvas: null,
-	context: null,
-	fps: 60,
-	keys: [],
-	mouse: { x: 0, y: 0, wheel: { up: false, down: false }, button: []},
-	browser: { width: 0, height: 0 },
-	screen: { width: 0, height: 0, center: false },
-
-	listen: function(event, element, callback)
+	_cul.ready = function(callback)
 	{
-		if (element.addEventListener)
+		var add_listener = document.addEventListener || document.attachEvent;
+		var remove_listener = document.removeEventListener || document.detachEvent;
+		var event_name = document.addEventListener ? 'DOMContentLoaded' : 'onreadystatechange';
+
+		add_listener.call(document, event_name, function()
 		{
-			element.addEventListener(event, callback, false);
-		} else if (element.attachEvent)
-		{
-			element.attachEvent('on' + event, callback);
-		}
-	},
+			remove_listener(event_name, arguments.callee, false);
 
-	trigger: function(event, element)
-	{
-		if (typeof(element[event]) == 'function')
-		{
-			element[event]();
-		}
-	},
+			callback();
+		}, false);
+	};
 
-	run: function()
-	{
-		if (this.init_callback != null)
-		{
-			this.init_callback();
-			this.init_callback = null;
-		}
-
-		this.loop();
-	},
-
-	loop: function()
-	{
-		if (cul.update_callback != null)
-		{
-			cul.update_callback();
-
-			cul.mouse.wheel.down = false;
-			cul.mouse.wheel.up = false;
-
-			for (var i = 0; i < 2; i++)
-			{
-				cul.mouse.button[i].down = false;
-				cul.mouse.button[i].up = false;
-			}
-
-			for (var i = 0; i < 255; i++)
-			{
-				cul.keys[i].down = false;
-				cul.keys[i].up = false;
-			}
-		}
-
-		if (cul.render_callback != null)
-		{
-			cul.render_callback();
-		}
-
-		window.setTimeout(cul.loop, 1000.0 / cul.fps);
-	},
-
-	ready: function(callback)
-	{
-		var old_callback = window.onload;
-
-		if (typeof window.onload != 'function')
-		{
-			this.listen('load', window, callback);
-		} else
-		{
-			this.listen('load', window, function()
-			{
-				if (old_callback)
-				{
-					old_callback();
-				}
-
-				callback();
-			});
-		}
-	},
-
-	resize: function()
-	{
-		if ( ! window.innerWidth)
-		{
-			if ( ! (document.documentElement.clientWidth == 0))
-			{
-				cul.browser.width = document.documentElement.clientWidth;
-				cul.browser.height = document.documentElement.clientHeight;
-			} else
-			{
-				cul.browser.width = document.body.clientWidth;
-				cul.browser.height = document.body.clientHeight;
-			}
-		} else
-		{
-			cul.browser.width = window.innerWidth;
-			cul.browser.height = window.innerHeight;
-		}
-
-		cul.canvas.width = (cul.screen.width == null ? cul.browser.width : cul.screen.width);
-		cul.canvas.height = (cul.screen.height == null ? cul.browser.height : cul.screen.height);
-		cul.canvas.style.cssText = 'width: ' + cul.canvas.width + 'px; height: ' + cul.canvas.height + 'px; position: absolute;' + (cul.screen.center ? ' left: ' + (cul.browser.width/2 - cul.context.canvas.width/2) + 'px; top: ' + (cul.browser.height/2 - cul.context.canvas.height/2) + 'px;' : '');
-	},
-
-	create: function(title, width, height, center, context)
-	{
-		document.title = title;
-
-		this.canvas = document.getElementById('cul');
-
-		if (typeof context == 'object')
-		{
-			this.context = context;
-		} else
-		{
-			this.context = this.canvas.getContext(context || '2d', { antialias: false });
-		}
-
-		this.resize();
-		this.listen('resize', window, this.resize);
-
-		this.screen.width = width;
-		this.screen.height = height;
-		this.screen.center = center;
-
-		this.listen('focus', window, function()
-		{
-			if (cul.focus_callback != null)
-			{
-				cul.focus_callback();
-			}
-		});
-
-		this.listen('blur', window, function()
-		{
-			if (cul.blur_callback != null)
-			{
-				cul.blur_callback();
-			}
-		});
-
-		this.listen('mousemove', document, function(e)
-		{
-			e = e || window.event;
-
-			if (e.pageX || e.pageY)
-			{
-  				cul.mouse.x = e.pageX;
-  				cul.mouse.y = e.pageY;
-			} else
-			{
-  				cul.mouse.x = e.clientX + document.body.scrollLeft + document.documentElement.scrollLeft;
-  				cul.mouse.y = e.clientY + document.body.scrollTop + document.documentElement.scrollTop;
-			}
-
-			cul.mouse.x -= cul.canvas.offsetLeft;
-			cul.mouse.y -= cul.canvas.offsetTop;
-		});
-
-		for (var i = 0; i < 2; i++)
-		{
-			this.mouse.button[i] = { down: false, up: false, state: CUL.KEY.IS_RELEASED };
-		}
-
-		this.listen('mousedown', window, function(e)
-		{
-			if (e.which)
-			{
-				cul.mouse.button[0].down = (e.which == 1);
-				cul.mouse.button[1].down = (e.which == 3);
-			} else if (e.button)
-			{
-				cul.mouse.button[0].down = (e.button == 0);
-				cul.mouse.button[1].down = (e.button == 2);
-			}
-
-			for (var i = 0; i < 2; i++)
-			{
-				if (cul.mouse.button[i].down)
-				{
-					cul.mouse.button[i].state = CUL.KEY.IS_PRESSED;
-				}
-			}
-		});
-
-		this.listen('mouseup', window, function(e)
-		{
-			if (e.which)
-			{
-				cul.mouse.button[0].up = (e.which == 1);
-				cul.mouse.button[1].up = (e.which == 3);
-			} else if (e.button)
-			{
-				cul.mouse.button[0].up = (e.button == 0);
-				cul.mouse.button[1].up = (e.button == 2);
-			}
-
-			for (var i = 0; i < 2; i++)
-			{
-				if (cul.mouse.button[i].up)
-				{
-					cul.mouse.button[i].state = CUL.KEY.IS_RELEASED;
-				}
-			}
-		});
-
-		this.listen('contextmenu', window, function(e)
-		{
-			e.preventDefault();
-		});
-
-		this.listen('mousewheel', window, function(e)
-		{
-			var delta = 0;
-			cul.mouse.wheel.up = false;
-			cul.mouse.wheel.down = false;
-
-			e = e || window.event;
-
-			if (e.wheelDelta)
-			{
-				delta = event.wheelDelta / 120;
-
-				if (window.opera)
-				{
-					delta = -delta;
-				}
-			} else if (e.detail)
-			{
-				delta = -e.detail / 3;
-			}
-
-			if (delta > 0)
-			{
-				cul.mouse.wheel.up = true;
-			} else if (delta < 0)
-			{
-				cul.mouse.wheel.down = true;
-			}
-		});
-
-		for (var i = 0; i < 255; i++)
-		{
-			this.keys[i] = { down: false, up: false, state: CUL.KEY.IS_RELEASED, once: false };
-		}
-
-		this.listen('keydown', window, function(event)
-		{
-			if ( ! cul.keys[event.keyCode].once)
-			{
-				cul.keys[event.keyCode].down = true;
-				cul.keys[event.keyCode].state = CUL.KEY.IS_PRESSED;
-				cul.keys[event.keyCode].once = true;
-			}
-		});
-
-		this.listen('keyup', window, function(event)
-		{
-			cul.keys[event.keyCode].up = true;
-			cul.keys[event.keyCode].once = false;
-			cul.keys[event.keyCode].state = CUL.KEY.IS_RELEASED;
-		});
-
-		this.canvas.width = (width == null ? this.browser.width : width);
-		this.canvas.height = (height == null ? this.browser.height : height);
-		this.canvas.style.cssText = 'width: ' + this.canvas.width + 'px; height: ' + this.canvas.height + 'px; position: absolute;' + (this.screen.center ? ' left: ' + (this.browser.width/2 - this.canvas.width/2) + 'px; top: ' + (this.browser.height/2 - this.canvas.height/2) + 'px;' : '');
-
-		return this.context;
-	},
-
-	render: function(callback)
-	{
-		this.render_callback = callback;
-	},
-
-	update: function(callback)
-	{
-		this.update_callback = callback;
-	},
-
-	init: function(callback)
-	{
-		this.init_callback = callback;
-	},
-
-	focus: function(callback)
-	{
-		this.focus_callback = callback;
-	},
-
-	blur: function(callback)
-	{
-		this.blur_callback = callback;
-	},
-
-	keycode: function(key)
-	{
-		for (var k in CUL_CHAR[0])
-		{
-			if (CUL_CHAR[0][k] == key)
-			{
-				return k;
-			}
-		}
-
-		return;
-	},
-
-	keydown: function(key)
-	{
-		if (typeof key == 'string')
-		{
-			key = this.keycode(key);
-		}
-
-		if (typeof this.keys[key] != 'undefined')
-		{
-			if (this.keys[key].down)
-			{
-				return true;
-			}
-		}
-
-		return false;
-	},
-
-	keyup: function(key)
-	{
-		if (typeof key == 'string')
-		{
-			key = this.keycode(key);
-		}
-
-		if (typeof this.keys[key] != 'undefined')
-		{
-			if (this.keys[key].up)
-			{
-				return true;
-			}
-		}
-
-		return false;
-	},
-
-	keypressed: function(key)
-	{
-		if (typeof key == 'string')
-		{
-			key = this.keycode(key);
-		}
-
-		if (typeof this.keys[key] != 'undefined')
-		{
-			if (this.keys[key].state == CUL.KEY.IS_PRESSED)
-			{
-				return true;
-			}
-		}
-
-		return false;
-	},
-
-	mousedown: function(button)
-	{
-		if (this.mouse.button[button].down)
-		{
-			return true;
-		}
-
-		return false;
-	},
-
-	mouseup: function(button)
-	{
-		if (this.mouse.button[button].up)
-		{
-			return true;
-		}
-
-		return false;
-	},
-
-	mousepressed: function(button)
-	{
-		if (this.mouse.button[button].state == CUL.KEY.IS_PRESSED)
-		{
-			return true;
-		}
-
-		return false;
-	},
-
-	mousewheelup: function()
-	{
-		return this.mouse.wheel.up;
-	},
-
-	mousewheeldown: function()
-	{
-		return this.mouse.wheel.down;
-	},
-
-	mousepos: function()
-	{
-		return { x: this.mouse.x, y: this.mouse.y };
-	},
-
-	get_fps: function()
-	{
-		return Math.floor(this.fps);
-	},
-
-	extend: function(from, to)
-	{
-		if (from == null || typeof from != 'object')
-		{
-			return from;
-		}
-
-		if (from.constructor == Date || from.constructor == RegExp || from.constructor == Function || from.constructor == String || from.constructor == Number || from.constructor == Boolean)
-		{
-			return new from.constructor(from);
-		}
-
-		to = to || new from.constructor();
-
-		for (var name in from)
-		{
-			to[name] = typeof to[name] == 'undefined' ? cul.extend(from[name], null) : from[name];
-		}
-
-		return to;
-	}
-};
-
-window.Class = function() {};
-
-Class.parent = function(func)
-{
-	var args = [];
-
-	for (var i = 1; i < arguments.length; i++)
-	{
-		args[i - 1] = arguments[i];
-	}
-
-	this._parent[func].apply(this, args);
-};
-
-Class.copy = function()
-{
-	var copy = cul.extend(this);
-
-	return copy;
-};
-
-Class.parent = function(func)
-{
-	var args = [];
-
-	for (var i = 1; i < arguments.length; i++)
-	{
-		args[i - 1] = arguments[i];
-	}
-
-	this._parent[func].apply(this, args);
-};
-
-Class.extend = function(extend_class)
-{
-	var _parent = this.prototype;
-	var _class = {};
-	var _struct = [ this.prototype, this, extend_class ];
-
-	for (var element in _struct)
-	{
-		for (var property in _struct[element])
-		{
-			_class[property] = _struct[element][property];
-		}
-	}
-
-	function Class()
-	{
-		if (this.construct)
-		{
-			this.construct.apply(this, arguments);
-		}
-	}
-
-	Class.prototype = _class;
-	Class.prototype._parent = _parent;
-	Class.constructor = Class;
-	Class.extend = this.extend;
-	Class.parent = this.parent;
-	Class.copy = this.copy;
-
-	return Class;
-};
+	return _cul;
+}(window.CUL || {}));
